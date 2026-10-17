@@ -1,5 +1,6 @@
 import { GraphQLError } from "graphql";
 import { randomUUID } from "node:crypto";
+import { milestoneDescriptions } from "./llm";
 import { run, runWriteTx } from "./neo4j";
 import {
   deriveScores,
@@ -252,17 +253,27 @@ export async function generateRoadmap(
   uid: string,
   roleId: string,
 ): Promise<void> {
-  if (!(await getRole(roleId)))
-    throw new GraphQLError(`Unknown role: ${roleId}`);
+  const role = await getRole(roleId);
+  if (!role) throw new GraphQLError(`Unknown role: ${roleId}`);
   const closure = orderGaps(await roleClosure(uid, roleId));
+  const guidance = await milestoneDescriptions({
+    role,
+    profile: await getProfile(uid),
+    skills: closure.map((g) => ({
+      id: g.id,
+      name: g.name,
+      isPrerequisite: g.weight === 0,
+    })),
+  });
   const milestones = closure.map((g, i) => ({
     id: randomUUID(),
     skillId: g.id,
     title: `Learn ${g.name}`,
     description:
-      g.weight === 0
+      guidance.get(g.id) ??
+      (g.weight === 0
         ? `Prerequisite skill: ${g.name}`
-        : `Build proficiency in ${g.name}`,
+        : `Build proficiency in ${g.name}`),
     orderIndex: i + 1,
     isCompleted: g.score >= PROFICIENCY_THRESHOLD,
   }));

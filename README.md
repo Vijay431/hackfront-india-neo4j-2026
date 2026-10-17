@@ -27,9 +27,10 @@ Workflow: each feature went OpenSpec propose → apply → archive, with Claude 
 ## Setup
 
 1. Provision a Neo4j AuraDB Free instance and copy `.env.example` to `.env`, filling in `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` (and `NEO4J_DATABASE` if not the default).
-2. `npm install`
-3. `npm run seed` — idempotent; safe to re-run, never touches user data. Re-run it after pulling: it adds the Forward Deployed Engineer role, new skills, effort estimates, and video/course/hands-on resources.
-4. `npm run dev` — open http://localhost:3000 and sign in.
+2. Optional: set `OPENROUTER_API_KEY` in `.env` to have a free open-source model on OpenRouter write personalized milestone descriptions when a roadmap is generated. `OPENROUTER_MODEL` overrides the default (`nvidia/nemotron-3-super-120b-a12b:free`). With the key empty, or if the call fails or times out (20 s), milestones use template text. The model only writes text; the graph decides skills and order. The role title and description, milestone skill names, and your profile answers (education, level, skills, tools, experience, goal, timeline, daily time, learning styles) are sent to OpenRouter and the model provider. Your email, password, and user id are not.
+3. `npm install`
+4. `npm run seed` — idempotent; safe to re-run, never touches user data. Re-run it after pulling: it adds the Forward Deployed Engineer role, new skills, effort estimates, and video/course/hands-on resources.
+5. `npm run dev` — open http://localhost:3000 and sign in.
 
 ## Demo sign-in
 
@@ -48,6 +49,6 @@ Mutations: `submitProfile(input)`, `generateRoadmap(roleId)`, `toggleMilestone(m
 
 ## Roadmap
 
-- Phase 2: resume upload/paste, skill extraction and role matching with Groq.
+- Phase 2: resume upload/paste, skill extraction and role matching with OpenRouter.
 - Phase 3: resume-aligned career guidance notes.
 - Phase 4: adaptive micro-quizzes, progress charts, real auth, more roles and resources.
