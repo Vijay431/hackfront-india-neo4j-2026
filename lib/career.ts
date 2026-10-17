@@ -90,7 +90,7 @@ export async function getProfile(uid: string): Promise<Profile | null> {
     `MATCH (u:User {id: $uid}) WHERE u.onboardedAt IS NOT NULL
      RETURN u.education AS education, u.level AS level, u.knownSkills AS knownSkills, u.tools AS tools,
             u.experience AS experience, u.goal AS goal, u.timelineMonths AS timelineMonths,
-            u.dailyTime AS dailyTime, u.learningStyle AS learningStyle, toString(u.onboardedAt) AS onboardedAt`,
+            u.dailyTime AS dailyTime, [s IN coalesce(u.learningStyles, [u.learningStyle]) WHERE s IS NOT NULL] AS learningStyles, toString(u.onboardedAt) AS onboardedAt`,
     { uid },
   );
   return (rows[0] as Profile | undefined) ?? null;
@@ -315,8 +315,10 @@ export async function getMyRoadmap(uid: string): Promise<MyRoadmap | null> {
   if (rows.length === 0) return null;
   const profile = await getProfile(uid);
   const role = rows[0].role as Role;
+  const chosen = new Set(profile?.learningStyles);
   const rank = (type: string) =>
-    type === profile?.learningStyle ? -1 : RESOURCE_TYPES.indexOf(type);
+    (chosen.has(type) ? 0 : RESOURCE_TYPES.length) +
+    RESOURCE_TYPES.indexOf(type);
   const milestones: Milestone[] = rows
     .filter((r) => r.m !== null)
     .map((r) => ({

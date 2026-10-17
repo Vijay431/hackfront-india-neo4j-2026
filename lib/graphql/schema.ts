@@ -87,7 +87,7 @@ const typeDefs = /* GraphQL */ `
     goal: String!
     timelineMonths: Int!
     dailyTime: String!
-    learningStyle: String!
+    learningStyles: [String!]!
     onboardedAt: String!
   }
   input ProfileInput {
@@ -99,7 +99,7 @@ const typeDefs = /* GraphQL */ `
     goal: String!
     timelineMonths: Int!
     dailyTime: String!
-    learningStyle: String!
+    learningStyles: [String!]!
   }
 
   type Query {

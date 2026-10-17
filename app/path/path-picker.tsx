@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Lock } from "lucide-react";
+import { ArrowUp, Mic, Search } from "lucide-react";
 import { pickPathAction } from "@/app/actions";
 
 export function PathPicker({
@@ -14,9 +14,12 @@ export function PathPicker({
 
   return (
     <>
-      <div className="relative mt-8">
-        <Lock
-          className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+      <div
+        className="mt-8 flex items-center gap-2 rounded-full border bg-muted p-2 pl-4 opacity-60"
+        aria-describedby="chat-soon"
+      >
+        <Search
+          className="size-4 shrink-0 text-muted-foreground"
           aria-hidden="true"
         />
         <input
@@ -24,13 +27,32 @@ export function PathPicker({
           disabled
           aria-label="Ask about careers"
           aria-describedby="chat-soon"
-          placeholder="Ask about careers — coming soon"
-          className="h-14 w-full rounded-full border bg-card pr-4 pl-11 text-base placeholder:text-muted-foreground disabled:cursor-not-allowed"
+          placeholder="Ask about careers"
+          className="h-10 min-w-0 flex-1 bg-transparent text-base placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
-        <p id="chat-soon" className="sr-only">
-          Chat is coming soon. Pick a path below instead.
-        </p>
+        <span className="shrink-0 rounded-full border bg-card px-2 py-0.5 text-xs font-medium">
+          Coming soon
+        </span>
+        <button
+          type="button"
+          disabled
+          aria-label="Voice input — coming soon"
+          className="grid size-10 shrink-0 place-items-center rounded-full disabled:cursor-not-allowed"
+        >
+          <Mic className="size-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          disabled
+          aria-label="Send — coming soon"
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary disabled:cursor-not-allowed"
+        >
+          <ArrowUp className="size-4" aria-hidden="true" />
+        </button>
       </div>
+      <p id="chat-soon" className="sr-only">
+        Chat is coming soon. Pick a path below instead.
+      </p>
       <ul className="mt-5 flex flex-wrap gap-3" aria-label="Career paths">
         {roles.map((r) => (
           <li key={r.id}>

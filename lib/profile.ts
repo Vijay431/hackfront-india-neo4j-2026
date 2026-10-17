@@ -15,7 +15,7 @@ export type QuestionId =
   | "goal"
   | "timelineMonths"
   | "dailyTime"
-  | "learningStyle";
+  | "learningStyles";
 export type Question = {
   id: QuestionId;
   title: string;
@@ -70,6 +70,38 @@ export const QUESTIONS: Question[] = [
       },
       { key: "ml", label: "Machine Learning", skills: ["ml-fundamentals"] },
       { key: "git", label: "Git / GitHub", skills: ["git"] },
+      { key: "typescript", label: "TypeScript", skills: ["typescript"] },
+      { key: "nodejs", label: "Node.js", skills: ["nodejs"] },
+      { key: "http", label: "HTTP / Web fundamentals", skills: ["http"] },
+      { key: "databases", label: "Database Design", skills: ["databases"] },
+      {
+        key: "oop",
+        label: "OOP / Design Patterns",
+        skills: ["design-patterns"],
+      },
+      {
+        key: "statistics",
+        label: "Statistics & Probability",
+        skills: ["statistics"],
+      },
+      {
+        key: "linear-algebra",
+        label: "Linear Algebra",
+        skills: ["linear-algebra"],
+      },
+      { key: "pandas", label: "Pandas / NumPy", skills: ["pandas"] },
+      { key: "data-viz", label: "Data Visualization", skills: ["data-viz"] },
+      {
+        key: "deep-learning",
+        label: "Deep Learning",
+        skills: ["deep-learning"],
+      },
+      { key: "nlp-llms", label: "NLP / LLMs", skills: ["nlp", "llms"] },
+      {
+        key: "system-design",
+        label: "System Design",
+        skills: ["system-design"],
+      },
       NONE,
     ],
   },
@@ -134,9 +166,9 @@ export const QUESTIONS: Question[] = [
     ],
   },
   {
-    id: "learningStyle",
+    id: "learningStyles",
     title: "How do you like to learn?",
-    multi: false,
+    multi: true,
     // Option keys are resource types, so ordering resources needs no lookup.
     options: [
       { key: "video", label: "Videos" },
@@ -156,7 +188,7 @@ export type Answers = {
   goal: string;
   timelineMonths: number;
   dailyTime: string;
-  learningStyle: string;
+  learningStyles: string[];
 };
 export type Profile = Answers & { onboardedAt: string };
 
@@ -185,6 +217,7 @@ export function parseAnswers(
         return { error: `Invalid answer for ${q.id}` };
       }
       const picked = [...new Set(value as string[])];
+      if (picked.length === 0) return { error: `Choose an answer for ${q.id}` };
       if (picked.includes(NONE_KEY) && picked.length > 1)
         return { error: `"None yet" cannot be combined for ${q.id}` };
       out[q.id] = picked;

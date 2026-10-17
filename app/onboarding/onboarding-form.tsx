@@ -8,10 +8,14 @@ import { NONE_KEY, QUESTIONS } from "@/lib/profile";
 
 type Picks = Record<string, string[]>;
 
-function Submit() {
+function Submit({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="h-11 px-6 text-base">
+    <Button
+      type="submit"
+      disabled={pending || disabled}
+      className="h-11 px-6 text-base"
+    >
       {pending ? "Saving…" : "Finish"}
     </Button>
   );
@@ -44,7 +48,7 @@ export function OnboardingForm() {
   }
 
   function next() {
-    if (!q.multi && current.length === 0) {
+    if (current.length === 0) {
       setError("Choose an answer to continue.");
       return;
     }
@@ -125,7 +129,7 @@ export function OnboardingForm() {
           Back
         </Button>
         {last ? (
-          <Submit />
+          <Submit disabled={current.length === 0} />
         ) : (
           <Button type="button" onClick={next} className="h-11 px-6 text-base">
             Next
