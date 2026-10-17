@@ -6,7 +6,9 @@ const { handleRequest } = createYoga<object, GraphQLContext>({
   graphqlEndpoint: "/api/graphql",
   fetchAPI: { Response },
   context: ({ request }) => {
-    const match = request.headers.get("cookie")?.match(/(?:^|;\s*)cp_uid=([^;]+)/);
+    const match = request.headers
+      .get("cookie")
+      ?.match(/(?:^|;\s*)cp_user=([^;]+)/);
     return { uid: match ? decodeURIComponent(match[1]) : null };
   },
 });

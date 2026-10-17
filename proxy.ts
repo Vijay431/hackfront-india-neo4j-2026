@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE = "cp_uid";
-
+/** Gate only: signed-out page requests go to /login. Routing by user state lives in lib/career#nextStep. */
 export function proxy(request: NextRequest) {
-  if (request.cookies.has(COOKIE)) return NextResponse.next();
-
-  const uid = crypto.randomUUID();
-  // Expose to this same request's server code, and persist for later ones.
-  request.cookies.set(COOKIE, uid);
-  const response = NextResponse.next({ request: { headers: request.headers } });
-  response.cookies.set(COOKIE, uid, {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-  });
-  return response;
+  if (request.cookies.has("cp_user")) return NextResponse.next();
+  return NextResponse.redirect(new URL("/login", request.url));
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!login|api/graphql|_next/static|_next/image|favicon.ico).*)"],
 };

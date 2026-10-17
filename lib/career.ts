@@ -1,12 +1,26 @@
 import { GraphQLError } from "graphql";
 import { randomUUID } from "node:crypto";
 import { run, runWriteTx } from "./neo4j";
+import {
+  deriveScores,
+  mappedSkillIds,
+  pace,
+  parseAnswers,
+  type Answers,
+  type Pace,
+  type Profile,
+} from "./profile";
 
 export const PROFICIENCY_THRESHOLD = 3;
 
 export type Role = { id: string; title: string; description: string };
 export type Resource = { id: string; title: string; url: string; type: string };
-export type Project = { id: string; title: string; description: string; difficulty: string };
+export type Project = {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: string;
+};
 export type RoleSkill = {
   id: string;
   name: string;
@@ -15,7 +29,14 @@ export type RoleSkill = {
   prerequisites: { id: string; name: string }[];
 };
 export type RoleDetail = Role & { skills: RoleSkill[] };
-export type GapSkill = { id: string; name: string; category: string; weight: number; prereqs: string[] };
+export type GapSkill = {
+  id: string;
+  name: string;
+  category: string;
+  weight: number;
+  prereqs: string[];
+};
+type ClosureSkill = GapSkill & { score: number };
 export type Milestone = {
   id: string;
   title: string;
@@ -23,6 +44,7 @@ export type Milestone = {
   orderIndex: number;
   isCompleted: boolean;
   isPrerequisite: boolean;
+  estHours: number;
   skill: { id: string; name: string };
   resources: Resource[];
   project: Project | null;
@@ -31,9 +53,10 @@ export type MyRoadmap = {
   role: Role;
   readiness: number;
   completionPercentage: number;
+  profile: Profile | null;
+  pace: Pace | null;
   milestones: Milestone[];
 };
-export type SkillScore = { skillId: string; score: number };
 
 export async function listRoles(): Promise<Role[]> {
   return (await run(
@@ -56,53 +79,103 @@ export async function getRole(id: string): Promise<RoleDetail | null> {
   );
   if (rows.length === 0) return null;
   const { skills, ...role } = rows[0];
-  return { ...(role as Role), skills: (skills as (RoleSkill | null)[]).filter((s) => s !== null) };
+  return {
+    ...(role as Role),
+    skills: (skills as (RoleSkill | null)[]).filter((s) => s !== null),
+  };
 }
 
-export async function submitAssessment(uid: string, roleId: string, scores: SkillScore[]): Promise<void> {
-  for (const { skillId, score } of scores) {
-    if (!Number.isInteger(score) || score < 0 || score > 5) {
-      throw new GraphQLError(`Invalid score for ${skillId}: must be an integer from 0 to 5`);
-    }
-  }
-  const ids = [...new Set(scores.map((s) => s.skillId))];
-  const [{ roleCount, skillCount }] = await run(
-    `OPTIONAL MATCH (r:Role {id: $roleId}) WITH count(r) AS roleCount
-     OPTIONAL MATCH (s:Skill) WHERE s.id IN $ids
-     RETURN roleCount, count(s) AS skillCount`,
-    { roleId, ids },
+export async function getProfile(uid: string): Promise<Profile | null> {
+  const rows = await run(
+    `MATCH (u:User {id: $uid}) WHERE u.onboardedAt IS NOT NULL
+     RETURN u.education AS education, u.level AS level, u.knownSkills AS knownSkills, u.tools AS tools,
+            u.experience AS experience, u.goal AS goal, u.timelineMonths AS timelineMonths,
+            u.dailyTime AS dailyTime, u.learningStyle AS learningStyle, toString(u.onboardedAt) AS onboardedAt`,
+    { uid },
   );
-  if (roleCount === 0) throw new GraphQLError(`Unknown role: ${roleId}`);
-  if (skillCount !== ids.length) throw new GraphQLError("Unknown skill id in assessment");
+  return (rows[0] as Profile | undefined) ?? null;
+}
 
+/** Where a signed-in user belongs: onboarding, path picker, or roadmap. */
+export async function nextStep(
+  uid: string,
+): Promise<"/onboarding" | "/path" | "/roadmap"> {
+  const [row] = await run(
+    `OPTIONAL MATCH (u:User {id: $uid})
+     RETURN u.onboardedAt IS NOT NULL AS hasProfile, EXISTS { (u)-[:HAS_ROADMAP]->(:Roadmap) } AS hasRoadmap`,
+    { uid },
+  );
+  return !row.hasProfile
+    ? "/onboarding"
+    : row.hasRoadmap
+      ? "/roadmap"
+      : "/path";
+}
+
+export async function ensureUser(uid: string): Promise<void> {
   await run(
-    `MERGE (u:User {id: $uid})
-       ON CREATE SET u.createdAt = datetime()
-     WITH u
-     OPTIONAL MATCH (u)-[old:TARGETS_ROLE]->()
-     DELETE old
-     WITH DISTINCT u
-     MATCH (r:Role {id: $roleId})
-     MERGE (u)-[:TARGETS_ROLE]->(r)
-     WITH u
-     UNWIND $scores AS sc
-     MATCH (s:Skill {id: sc.skillId})
-     MERGE (u)-[hs:HAS_SKILL]->(s)
-     SET hs.proficiencyScore = sc.score, hs.verifiedAt = datetime()`,
-    { uid, roleId, scores },
+    `MERGE (u:User {id: $uid}) ON CREATE SET u.createdAt = datetime()`,
+    { uid },
     "WRITE",
   );
 }
 
+export async function submitProfile(
+  uid: string,
+  raw: Record<string, unknown>,
+): Promise<Profile> {
+  const parsed = parseAnswers(raw);
+  if ("error" in parsed) throw new GraphQLError(parsed.error);
+  const answers: Answers = parsed.answers;
+
+  const info = await run(
+    `MATCH (s:Skill) WHERE s.id IN $ids
+     RETURN s.id AS id, EXISTS { (s)-[:REQUIRES_PREREQUISITE]->() } AS hasPrereq,
+            [(s)-[:REQUIRES_PREREQUISITE*1..]->(p:Skill) | p.id] AS prereqs`,
+    { ids: mappedSkillIds(answers) },
+  );
+  const scores = deriveScores(
+    answers,
+    info as { id: string; hasPrereq: boolean; prereqs: string[] }[],
+  );
+
+  await runWriteTx(async (tx) => {
+    await tx(
+      `MERGE (u:User {id: $uid}) ON CREATE SET u.createdAt = datetime()
+       SET u += $props, u.onboardedAt = datetime()
+       WITH u
+       OPTIONAL MATCH (u)-[old:HAS_SKILL]->()
+       DELETE old`,
+      { uid, props: answers },
+    );
+    await tx(
+      `MATCH (u:User {id: $uid})
+       UNWIND $scores AS sc
+       MATCH (s:Skill {id: sc.skillId})
+       CREATE (u)-[:HAS_SKILL {proficiencyScore: sc.score, verifiedAt: datetime()}]->(s)`,
+      { uid, scores },
+    );
+  });
+  return (await getProfile(uid))!;
+}
+
 /** Kahn's algorithm over the gap set: prerequisites first, ties by weight desc then name. */
-export function orderGaps(skills: GapSkill[]): GapSkill[] {
+export function orderGaps<T extends GapSkill>(skills: T[]): T[] {
   const inSet = new Set(skills.map((s) => s.id));
-  const remaining = new Map(skills.map((s) => [s.id, { ...s, prereqs: s.prereqs.filter((p) => inSet.has(p)) }]));
+  const remaining = new Map(
+    skills.map((s) => [
+      s.id,
+      { ...s, prereqs: s.prereqs.filter((p) => inSet.has(p)) },
+    ]),
+  );
   const done = new Set<string>();
-  const ordered: GapSkill[] = [];
+  const ordered: T[] = [];
   while (remaining.size > 0) {
-    const ready = [...remaining.values()].filter((s) => s.prereqs.every((p) => done.has(p)));
-    if (ready.length === 0) throw new Error("Prerequisite cycle in skill graph");
+    const ready = [...remaining.values()].filter((s) =>
+      s.prereqs.every((p) => done.has(p)),
+    );
+    if (ready.length === 0)
+      throw new Error("Prerequisite cycle in skill graph");
     ready.sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
     const next = ready[0];
     ordered.push(next);
@@ -112,7 +185,10 @@ export function orderGaps(skills: GapSkill[]): GapSkill[] {
   return ordered;
 }
 
-export async function gapAnalysis(uid: string, roleId: string): Promise<GapSkill[]> {
+export async function gapAnalysis(
+  uid: string,
+  roleId: string,
+): Promise<GapSkill[]> {
   const rows = await run(
     `CALL () {
        MATCH (:Role {id: $roleId})-[:REQUIRES_SKILL]->(s:Skill)
@@ -149,15 +225,46 @@ export async function readiness(uid: string, roleId: string): Promise<number> {
   return den > 0 ? Math.round((num / den) * 100) : 0;
 }
 
-export async function generateRoadmap(uid: string, roleId: string): Promise<void> {
-  if (!(await getRole(roleId))) throw new GraphQLError(`Unknown role: ${roleId}`);
-  const gaps = await gapAnalysis(uid, roleId);
-  const milestones = gaps.map((g, i) => ({
+/** Every skill the role requires plus all transitive prerequisites, with the user's current score. */
+async function roleClosure(
+  uid: string,
+  roleId: string,
+): Promise<ClosureSkill[]> {
+  const rows = await run(
+    `MATCH (:Role {id: $roleId})-[:REQUIRES_SKILL]->(d:Skill)
+     OPTIONAL MATCH (d)-[:REQUIRES_PREREQUISITE*1..]->(p:Skill)
+     WITH collect(DISTINCT d) + collect(DISTINCT p) AS all
+     UNWIND all AS s
+     WITH DISTINCT s
+     OPTIONAL MATCH (:Role {id: $roleId})-[req:REQUIRES_SKILL]->(s)
+     OPTIONAL MATCH (s)-[:REQUIRES_PREREQUISITE]->(pre:Skill)
+     OPTIONAL MATCH (:User {id: $uid})-[hs:HAS_SKILL]->(s)
+     RETURN s.id AS id, s.name AS name, s.category AS category,
+            coalesce(req.importanceWeight, 0) AS weight,
+            [x IN collect(DISTINCT pre.id) WHERE x IS NOT NULL] AS prereqs,
+            max(coalesce(hs.proficiencyScore, 0)) AS score`,
+    { uid, roleId },
+  );
+  return rows as ClosureSkill[];
+}
+
+export async function generateRoadmap(
+  uid: string,
+  roleId: string,
+): Promise<void> {
+  if (!(await getRole(roleId)))
+    throw new GraphQLError(`Unknown role: ${roleId}`);
+  const closure = orderGaps(await roleClosure(uid, roleId));
+  const milestones = closure.map((g, i) => ({
     id: randomUUID(),
     skillId: g.id,
     title: `Learn ${g.name}`,
-    description: g.weight === 0 ? `Prerequisite skill: ${g.name}` : `Build proficiency in ${g.name}`,
+    description:
+      g.weight === 0
+        ? `Prerequisite skill: ${g.name}`
+        : `Build proficiency in ${g.name}`,
     orderIndex: i + 1,
+    isCompleted: g.score >= PROFICIENCY_THRESHOLD,
   }));
   await runWriteTx(async (tx) => {
     await tx(
@@ -176,7 +283,7 @@ export async function generateRoadmap(uid: string, roleId: string): Promise<void
        MATCH (s:Skill {id: m.skillId})
        CREATE (rm)-[:CONTAINS_MILESTONE]->
          (:Milestone {id: m.id, title: m.title, description: m.description,
-                      orderIndex: m.orderIndex, isCompleted: false})-[:TARGETS_SKILL]->(s)`,
+                      orderIndex: m.orderIndex, isCompleted: m.isCompleted})-[:TARGETS_SKILL]->(s)`,
       { uid, rid: randomUUID(), milestones },
     );
     await tx(
@@ -186,6 +293,8 @@ export async function generateRoadmap(uid: string, roleId: string): Promise<void
     );
   });
 }
+
+const RESOURCE_TYPES = ["docs", "video", "course", "hands-on"];
 
 export async function getMyRoadmap(uid: string): Promise<MyRoadmap | null> {
   const rows = await run(
@@ -199,12 +308,15 @@ export async function getMyRoadmap(uid: string): Promise<MyRoadmap | null> {
           collect(DISTINCT res {.id, .title, .url, .type}) AS resources,
           head(collect(DISTINCT p {.id, .title, .description, .difficulty})) AS project
      ORDER BY m.orderIndex
-     RETURN r {.id, .title, .description} AS role, m {.*} AS m, s {.id, .name} AS skill,
+     RETURN r {.id, .title, .description} AS role, m {.*} AS m, s {.id, .name, .estHours} AS skill,
             req IS NULL AS isPrerequisite, resources, project`,
     { uid },
   );
   if (rows.length === 0) return null;
+  const profile = await getProfile(uid);
   const role = rows[0].role as Role;
+  const rank = (type: string) =>
+    type === profile?.learningStyle ? -1 : RESOURCE_TYPES.indexOf(type);
   const milestones: Milestone[] = rows
     .filter((r) => r.m !== null)
     .map((r) => ({
@@ -214,20 +326,32 @@ export async function getMyRoadmap(uid: string): Promise<MyRoadmap | null> {
       orderIndex: r.m.orderIndex,
       isCompleted: r.m.isCompleted,
       isPrerequisite: r.isPrerequisite,
-      skill: r.skill,
-      resources: r.resources,
+      estHours: r.skill.estHours,
+      skill: { id: r.skill.id, name: r.skill.name },
+      resources: [...(r.resources as Resource[])].sort(
+        (a, b) => rank(a.type) - rank(b.type),
+      ),
       project: r.project ?? null,
     }));
   const done = milestones.filter((m) => m.isCompleted).length;
   return {
     role,
     readiness: await readiness(uid, role.id),
-    completionPercentage: milestones.length === 0 ? 100 : Math.round((done / milestones.length) * 100),
+    completionPercentage:
+      milestones.length === 0
+        ? 100
+        : Math.round((done / milestones.length) * 100),
+    profile,
+    pace: profile ? pace(milestones, profile, new Date()) : null,
     milestones,
   };
 }
 
-export async function toggleMilestone(uid: string, milestoneId: string, completed: boolean): Promise<void> {
+export async function toggleMilestone(
+  uid: string,
+  milestoneId: string,
+  completed: boolean,
+): Promise<void> {
   const rows = await run(
     `MATCH (:User {id: $uid})-[:HAS_ROADMAP]->(:Roadmap)-[:CONTAINS_MILESTONE]->(m:Milestone {id: $milestoneId})
      SET m.isCompleted = $completed
