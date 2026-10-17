@@ -6,44 +6,19 @@ Defines the shared interface shell and the visible states of the assessment and 
 ## Requirements
 
 ### Requirement: Persistent navigation
-Every page SHALL show a header with the product name linking to the role list and navigation links to the role list and to the user's roadmap.
+Every page SHALL show a header with the product name. For a signed-in user the header SHALL also show links to "Change path" (the path picker) and "My roadmap", the signed-in email, and a "Log out" action. A signed-out visitor SHALL see only the product name.
 
 #### Scenario: Navigate from roadmap
-- **WHEN** the user is on the roadmap page and activates the "Roles" link
-- **THEN** the role list page opens
+- **WHEN** the user is on the roadmap page and activates the "Change path" link
+- **THEN** the path picker opens
 
 #### Scenario: Unknown route
-- **WHEN** the user opens an unknown role id
-- **THEN** a not-found page with the header and a link back to the role list is shown
+- **WHEN** the user opens an unknown URL
+- **THEN** a not-found page with the header and a link back to the home page is shown
 
-### Requirement: Role list presentation
-The home page SHALL list the five roles in a fixed numbered order with title and description, each linking to that role's assessment, and SHALL show a placeholder while roles load.
-
-#### Scenario: Roles loaded
-- **WHEN** the home page finishes loading
-- **THEN** five roles are listed, each as a link to its assessment page
-
-#### Scenario: Roles loading
-- **WHEN** the role query has not yet returned
-- **THEN** five placeholder rows are shown and marked busy
-
-### Requirement: Named proficiency levels
-Each skill rating control SHALL display the current score together with its level name: 0 None, 1 Aware, 2 Learning, 3 Proficient, 4 Strong, 5 Expert, and SHALL visually distinguish scores at or above the proficiency threshold of 3.
-
-#### Scenario: Reach threshold
-- **WHEN** the user moves a skill rating from 2 to 3
-- **THEN** the control shows "3 Proficient" in the completed style
-
-#### Scenario: Assistive technology
-- **WHEN** a screen reader focuses a rating control
-- **THEN** it announces the skill name, the score out of 5, and the level name
-
-### Requirement: Reachable assessment submit
-The assessment page SHALL keep its submit action visible while the user scrolls through the skill list, and SHALL state that unrated skills count as 0.
-
-#### Scenario: Long skill list
-- **WHEN** the skill list is taller than the viewport
-- **THEN** the "Build my roadmap" action remains visible without scrolling to the end
+#### Scenario: Signed out
+- **WHEN** a signed-out visitor views the sign-in page
+- **THEN** the header shows the product name and no navigation links or "Log out"
 
 ### Requirement: Route-style roadmap
 The roadmap SHALL render milestones in order along a single vertical route. Each milestone SHALL show its order number, skill name, description, resources, and linked project if any, and SHALL tag prerequisite milestones. The route segment after a milestone SHALL read as completed when that milestone is complete and as pending otherwise.
@@ -72,4 +47,48 @@ All interactive controls SHALL have visible keyboard focus, accessible names, an
 
 #### Scenario: Reduced motion
 - **WHEN** the user prefers reduced motion
-- **THEN** the home diagram route line is drawn statically with no animation
+- **THEN** the sign-in page diagram route line is drawn statically with no animation
+
+### Requirement: Sign-in screen
+The sign-in page SHALL show a short product explanation and the prerequisite-chain diagram beside the email and password form. On narrow screens the form SHALL come first.
+
+#### Scenario: Wide layout
+- **WHEN** the sign-in page is viewed at 1440px wide
+- **THEN** the explanation and diagram sit beside the form
+
+#### Scenario: Narrow layout
+- **WHEN** the sign-in page is viewed at 390px wide
+- **THEN** the form is above the explanation
+
+### Requirement: Onboarding screen
+The questionnaire SHALL show one question at a time with a "Question N of 9" progress indicator. Options SHALL be large selectable controls grouped with their question label, so keyboard and screen-reader users can operate them.
+
+#### Scenario: Progress shown
+- **WHEN** the user is on the fourth question
+- **THEN** the screen shows "Question 4 of 9" and a progress bar at the matching position
+
+#### Scenario: Keyboard selection
+- **WHEN** a keyboard user tabs to an option and presses Space
+- **THEN** the option is selected
+
+### Requirement: Path picker screen
+The path picker SHALL look like a chat assistant: a greeting prompt, a chat composer below it, and one chip per role below the composer. The composer SHALL show a search icon, a text input, a voice-input button, and a send button. The whole composer SHALL be visibly grayed out, disabled, and labelled as coming soon. Activating a chip SHALL build that role's roadmap and open it. While it builds, the chosen chip SHALL show a busy state and other chips SHALL be disabled.
+
+#### Scenario: Chips shown
+- **WHEN** the path picker opens
+- **THEN** six role chips are shown below a grayed-out chat composer marked "coming soon" with search, voice, and send controls
+
+#### Scenario: Locked chat
+- **WHEN** the user tries to type in the chat input, or activates the voice or send button
+- **THEN** no text is entered, no voice capture starts, and nothing is sent
+
+#### Scenario: Pick a path
+- **WHEN** the user activates the "Forward Deployed Engineer" chip
+- **THEN** the chip shows a busy state and the Forward Deployed Engineer roadmap opens
+
+### Requirement: Pre-checked milestones on the route
+Milestones that start complete because of the profile SHALL look the same as milestones the user completed, so the route reads solid through known skills.
+
+#### Scenario: Known skill on route
+- **WHEN** a roadmap opens with the Python milestone pre-checked
+- **THEN** the Python checkbox is checked and the route segment after it shows completed
