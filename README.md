@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareerPath AI
 
-## Getting Started
+Pick a target role, rate your skills (0–5), and get a prerequisite-ordered learning roadmap computed from a Neo4j skill graph.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Provision a Neo4j AuraDB Free instance and copy `.env.example` to `.env`, filling in `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` (and `NEO4J_DATABASE` if not the default).
+2. `npm install`
+3. `npm run seed` — idempotent; safe to re-run, never touches user data.
+4. `npm run dev` — open http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## GraphQL
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+GraphiQL and the API live at `/api/graphql`. User-scoped operations use the anonymous `cp_uid` cookie set by `proxy.ts`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Queries: `roles`, `role(id)`, `gapAnalysis(roleId)`, `myRoadmap`.
+Mutations: `submitAssessment(roleId, assessments)`, `generateRoadmap(roleId)`, `toggleMilestone(milestoneId, completed)`.
 
-## Learn More
+## Roadmap
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Phase 2: resume upload/paste, skill extraction and role matching with Groq.
+- Phase 3: resume-aligned career guidance notes.
+- Phase 4: adaptive micro-quizzes, progress charts, auth, more roles and resources.
